@@ -29,8 +29,8 @@ use Microwin7\PHPUtils\DB\SingletonConnector;
 use Symfony\Component\HttpFoundation\Request;
 use Microwin7\TextureProvider\Utils\LuckPerms;
 use Symfony\Component\HttpFoundation\Response;
+use Microwin7\TextureProvider\Data\TextureProperty;
 use Microwin7\PHPUtils\Utils\Texture as TextureUtils;
-use Microwin7\PHPUtils\Exceptions\FileSystemException;
 use Microwin7\PHPUtils\Exceptions\FileUploadException;
 use Microwin7\PHPUtils\Exceptions\TextureLoaderException;
 use Microwin7\PHPUtils\Exceptions\TextureSizeHDException;
@@ -125,7 +125,7 @@ class Texture implements JsonSerializable
     }
     private function default(): void
     {
-        $this->setTextures(new DefaultType($this->user->responseType, $this->skin ? true : false, $this->cape ? true : false));
+        $this->setTextures(new DefaultType($this->user->responseType, $this->skin ? true : false, $this->cape ? true : false, $this->skinID, $this->capeID));
     }
     private function setTextures(StorageType|MojangType|CollectionType|DefaultType $storageType): void
     {
@@ -213,14 +213,27 @@ class Texture implements JsonSerializable
             default => Main::getScriptURL() . $url, // GET Params
         };
     }
-    public static function getSkinDataForAvatar(string|null $login): string
+    public static function getSkinData(string|null $login): string
     {
-        $storageType = new StorageType($login, null, null, ResponseTypeEnum::AVATAR);
+        $_ = null;
+        $storageType = new StorageType($login, null, $_, ResponseTypeEnum::AVATAR);
         if ($storageType->skinData !== null) return $storageType->skinData;
         $storageType = new DefaultType(ResponseTypeEnum::AVATAR, false, true);
         if ($storageType->skinData !== null) return $storageType->skinData;
         else self::ResponseTexture(null);
     }
+    public static function getCapeData(string|null $login): string
+    {
+        $_ = null;
+        $storageType = new StorageType($_, null, $login, ResponseTypeEnum::CAPE_RESIZE);
+        if ($storageType->capeData !== null) return $storageType->capeData;
+        $storageType = new DefaultType(ResponseTypeEnum::CAPE_RESIZE, true, false);
+        if ($storageType->capeData !== null) return $storageType->capeData;
+        else self::ResponseTexture(null);
+    }
+    /** Установлены доверительные отношения по полученным данным, записиь username и uuid производится без проверки,
+     * если сопоставление будет нарушено, и uuid или username будут дублироваться, но с другим сопоставлением, username будет обновлён, исходя из uuid
+     */
     public static function loadTexture(RequestParams|LoaderRequestParams $requestParams, UploadedFileInterface $uploadedFile, bool $hd_allow = false): Skin|Cape
     {
         if (!in_array($requestParams->responseType, [ResponseTypeEnum::SKIN, ResponseTypeEnum::CAPE]))
@@ -247,10 +260,11 @@ class Texture implements JsonSerializable
         }
         GDUtils::getImageMimeType($data) === IMAGETYPE_PNG ?: throw new TextureLoaderException(PNG_FILE_SELECTION);
 
-        [$image, $w, $h] = GDUtils::pre_calculation($data);
-
+        $textureProperty = new TextureProperty($data);
+        if ($requestParams->responseType === ResponseTypeEnum::SKIN && Config::SKIN_RESIZE() && ($textureProperty->w / 2) === $textureProperty->h)
+            $textureProperty = new TextureProperty((new GDUtils(ResponseTypeEnum::SKIN_RESIZE, skinProperty: $textureProperty))->getResultData());
         try {
-            TextureUtils::validateHDSize($w, $h, $requestParams->responseType);
+            TextureUtils::validateHDSize($textureProperty->w, $textureProperty->h, $requestParams->responseType);
             if (Config::LUCKPERMS_USE_PERMISSION_HD_SKIN() && !$hd_allow) {
                 if ((new LuckPerms($requestParams))->getUserWeight() < Config::LUCKPERMS_MIN_WEIGHT()) {
                     match ($requestParams->responseType) {
@@ -265,18 +279,23 @@ class Texture implements JsonSerializable
                 };
             }
         } catch (TextureSizeHDException) {
-            TextureUtils::validateSize($w, $h, $requestParams->responseType);
+            TextureUtils::validateSize($textureProperty->w, $textureProperty->h, $requestParams->responseType);
         }
         $MODULE_ARRAY_DATA = MainConfig::MODULES['TextureProvider'];
-        $table_users = $MODULE_ARRAY_DATA['table_user']['TABLE_NAME'];
-        $user_id_column = $MODULE_ARRAY_DATA['table_user']['id_column'];
+        $table_users = $MODULE_ARRAY_DATA['table_user']['TABLE_NAME']; 
+        $user_username_column = $MODULE_ARRAY_DATA['table_user']['username_column'];
         $user_uuid_column = $MODULE_ARRAY_DATA['table_user']['uuid_column'];
         $user_id = '';
         if (in_array(Config::USER_STORAGE_TYPE(), [UserStorageTypeEnum::DB_USER_ID, UserStorageTypeEnum::DB_SHA1, UserStorageTypeEnum::DB_SHA256])) {
             $user_id = (string)SingletonConnector::get('TextureProvider')->query(<<<SQL
-                SELECT $user_id_column FROM $table_users WHERE $user_uuid_column IN (?)
-                SQL, "s", $requestParams->uuid)->value();
+                INSERT INTO $table_users ($user_username_column, $user_uuid_column)
+                VALUES (?, ?)
+                ON CONFLICT ($user_uuid_column) DO UPDATE SET
+                $user_username_column = excluded.$user_username_column, $user_uuid_column = excluded.$user_uuid_column
+                RETURNING *;
+                SQL, "ss", $requestParams->username, $requestParams->uuid)->value();
         }
+
         /** @var string $requestParams->login */
         $requestParams->setVariable(
             'login',
@@ -284,25 +303,20 @@ class Texture implements JsonSerializable
                 UserStorageTypeEnum::USERNAME => $requestParams->username,
                 UserStorageTypeEnum::UUID => $requestParams->uuid,
                 UserStorageTypeEnum::DB_USER_ID => $user_id,
-                UserStorageTypeEnum::DB_SHA1, UserStorageTypeEnum::DB_SHA256 => TextureUtils::digest($data)
+                UserStorageTypeEnum::DB_SHA1, UserStorageTypeEnum::DB_SHA256 => TextureUtils::digest($textureProperty->dataOrigin)
             }
         );
         /** @var bool $texture->isSlim */
-        $texture = static::generateTextureFromLoaderRequestParams($requestParams, $data, $image);
-
-        try {
-            $uploadedFile->moveTo(TextureUtils::PATH($requestParams->responseType, $requestParams->login));
-        } catch (\RuntimeException $e) {
-            throw new FileSystemException(FILE_MOVE_FAILED . $e->getMessage());
-        }
+        $texture = static::generateTextureFromLoaderRequestParams($requestParams, $textureProperty->dataOrigin, $textureProperty->image);
+        FileSystem::save_lock($textureProperty->dataOrigin, TextureUtils::PATH($requestParams->responseType, $requestParams->login));
         if (in_array(Config::USER_STORAGE_TYPE(), [UserStorageTypeEnum::DB_SHA1, UserStorageTypeEnum::DB_SHA256])) {
             static::insertOrUpdateAssetDB(
                 $user_id,
                 $requestParams->responseType->name,
                 $requestParams->login,
-                (string)match ($requestParams->responseType) {
-                    ResponseTypeEnum::SKIN => (int)$texture->isSlim,
-                    ResponseTypeEnum::CAPE => 0
+                match ($requestParams->responseType) {
+                    ResponseTypeEnum::SKIN => $texture->isSlim ? 'SLIM' : null,
+                    ResponseTypeEnum::CAPE => null
                 }
             );
         }
@@ -334,7 +348,7 @@ class Texture implements JsonSerializable
             )
         };
     }
-    public static function insertOrUpdateAssetDB(string $user_id, string $type, string $hash, string $meta_texture): void
+    public static function insertOrUpdateAssetDB(string $user_id, string $type, string $hash, null|string $meta_texture): void
     {
         $table_user_assets = MainConfig::MODULES['TextureProvider']['table_user_assets']['TABLE_NAME'];
         $assets_id_column = MainConfig::MODULES['TextureProvider']['table_user_assets']['id_column'];
@@ -356,7 +370,7 @@ class Texture implements JsonSerializable
                 $hash_column = excluded.$hash_column, $texture_meta_column = excluded.$texture_meta_column
             SQL
                 },
-            "ssss",
+            $meta_texture === null ? "sssn" : "ssss",
             $user_id,
             $type,
             $hash,
@@ -366,7 +380,7 @@ class Texture implements JsonSerializable
     public function toArray(): array|stdClass
     {
         $json = [];
-        if ($this->skin) {
+        if ($this->skin !== null) {
             $json[ResponseTypeEnum::SKIN->name] = $this->skin;
             if ($this->textureStorageType !== TextureStorageTypeEnum::MOJANG) {
                 $json[ResponseTypeEnum::AVATAR->name] = [
@@ -411,16 +425,60 @@ class Texture implements JsonSerializable
                         ),
                     },
                 ];
+                $json[ResponseTypeEnum::BACK->name] = [
+                    'url' => Main::getScriptURL() . match (Config::ROUTERING()) {
+                        TRUE => implode('/', array_filter(
+                            [
+                                ResponseTypeEnum::BACK->name,
+                                Config::BLOCK_CANVAS(),
+                                $this->skinID ?? 'DEFAULT'
+                            ],
+                            function ($v) {
+                                return $v !== null;
+                            }
+                        )),
+                        FALSE => 'index.php?' . http_build_query(
+                            [
+                                ResponseTypeEnum::getNameRequestVariable() => ResponseTypeEnum::BACK->name,
+                                'size' => Config::BLOCK_CANVAS(),
+                                'login' => $this->skinID ?? 'DEFAULT',
+                            ]
+                        ),
+                    },
+                ];
             }
         }
-        if ($this->cape) $json[ResponseTypeEnum::CAPE->name] = $this->cape;
+        if ($this->cape !== null) {
+            $json[ResponseTypeEnum::CAPE->name] = $this->cape;
+            $json[ResponseTypeEnum::CAPE_RESIZE->name] = [
+                'url' => Main::getScriptURL() . match (Config::ROUTERING()) {
+                    TRUE => implode('/', array_filter(
+                        [
+                            ResponseTypeEnum::CAPE_RESIZE->name,
+                            Config::CAPE_CANVAS(),
+                            $this->capeID ?? 'DEFAULT'
+                        ],
+                        function ($v) {
+                            return $v !== null;
+                        }
+                    )),
+                    FALSE => 'index.php?' . http_build_query(
+                        [
+                            ResponseTypeEnum::getNameRequestVariable() => ResponseTypeEnum::CAPE_RESIZE->name,
+                            'size' => Config::CAPE_CANVAS(),
+                            'login' => $this->capeID ?? 'DEFAULT',
+                        ]
+                    ),
+                },
+            ];
+        }
         return !empty($json) ? $json : new stdClass;
     }
     public function jsonSerialize(): array|stdClass
     {
         return $this->toArray();
     }
-    public static function ResponseTexture(string|null $CONTENT, int|null $lastModified = null): never
+    public static function ResponseTexture(\GdImage|string|null $CONTENT, int|null $lastModified = null): never
     {
         if ($CONTENT == null) {
             http_response_code(404);
@@ -435,12 +493,22 @@ class Texture implements JsonSerializable
                 default => 60
             };
         }
+        if ($CONTENT instanceof \GdImage) {
+            $CONTENT = (function (\GdImage $canvas): string {
+                ob_start();
+                imagepng($canvas);
+                return ob_get_clean();
+            })($CONTENT);
+        }
         // Установка заголовков
         $response->headers->set('Content-Type', 'image/png');
         $response->headers->set('Content-Length', (string) strlen($CONTENT));
         $response->setLastModified(Carbon::createFromTimestamp($lastModified ?? time()));
         $response->setETag(hash('sha256', $CONTENT));
-        $response->setPrivate();
+        match (Config::USER_STORAGE_TYPE()) {
+            UserStorageTypeEnum::DB_SHA1, UserStorageTypeEnum::DB_SHA256 => $response->setPublic(),
+            default => $response->setPrivate(),
+        };
         $response->setMaxAge($max_age);
         match (Config::USER_STORAGE_TYPE()) {
             UserStorageTypeEnum::DB_SHA1, UserStorageTypeEnum::DB_SHA256 => $response->setImmutable(),

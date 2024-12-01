@@ -33,10 +33,9 @@ class CollectionType
         $this->index = new IndexSkinRandomCollection;
         $this->getSkinData();
         if ($this->skinData !== null) {
-            if ($responseType !== ResponseTypeEnum::JSON && $responseType !== ResponseTypeEnum::AVATAR) $this->skinResize();
             if ($responseType === ResponseTypeEnum::SKIN) Texture::ResponseTexture($this->skinData, $this->skinLastModified);
             $this->skinUrl = $this->getSkinUrl();
-            $this->skinSlim = $this->checkIsSlim();
+            $this->skinSlim = GDUtils::slim($this->skinData);
         }
 
         $this->capeData = null;
@@ -46,41 +45,11 @@ class CollectionType
     {
         [$this->skinData, $this->skinLastModified] = $this->index->getDataFromUUID($this->uuid);
     }
-    private function skinResize(): void
-    {
-        /** @var string $this->skinData */
-        if (Config::SKIN_RESIZE()) {
-            try {
-                $this->skinData = GDUtils::skin_resize($this->skinData);
-            } catch (TypeError $e) {
-                throw new TypeError(sprintf(
-                    '%s' . PHP_EOL . '%s' . PHP_EOL . '%s',
-                    $e->getMessage(),
-                    'StorageType: ' . __CLASS__,
-                    'From UUID: ' . $this->uuid,
-                ));
-            }
-        }
-    }
     private function getSkinUrl(): string
     {
         return (string)(new RequestParams)
             ->withEnum(ResponseTypeEnum::SKIN)
             ->withEnum(TextureStorageTypeEnum::COLLECTION)
             ->setVariable('login', $this->uuid);
-    }
-    private function checkIsSlim(): bool
-    {
-        /** @var string $this->skinData */
-        try {
-            return GDUtils::slim($this->skinData);
-        } catch (TypeError $e) {
-            throw new TypeError(sprintf(
-                '%s' . PHP_EOL . '%s' . PHP_EOL . '%s',
-                $e->getMessage(),
-                'StorageType: ' . __CLASS__,
-                'From UUID: ' . $this->uuid,
-            ));
-        }
     }
 }

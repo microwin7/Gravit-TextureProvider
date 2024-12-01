@@ -11,11 +11,13 @@ use Microwin7\PHPUtils\Utils\Texture;
 use Microwin7\TextureProvider\Config;
 use FastRoute\Dispatcher\Result\Matched;
 use Microwin7\TextureProvider\Data\User;
+use Microwin7\PHPUtils\Configs\MainConfig;
 use Microwin7\TextureProvider\Utils\Cache;
 use FastRoute\Dispatcher\Result\NotMatched;
 use Psr\Http\Message\UploadedFileInterface;
 use Microwin7\PHPUtils\Security\BearerToken;
 use Microwin7\TextureProvider\Utils\GDUtils;
+use Microwin7\PHPUtils\DB\SingletonConnector;
 use Microwin7\PHPUtils\Response\JsonResponse;
 use Microwin7\PHPUtils\Attributes\AsArguments;
 use FastRoute\Dispatcher\Result\MethodNotAllowed;
@@ -48,7 +50,7 @@ class InitRequest
     private function initRoute(): void
     {
         /** @psalm-suppress DeprecatedFunction */
-        $dispatcher = \FastRoute\simpleDispatcher(function (ConfigureRoutes $r) {
+        $dispatcher = \FastRoute\cachedDispatcher(function (ConfigureRoutes $r) {
             $r->addRoute(
                 HTTP::GET->name,
                 '/{' . ResponseTypeEnum::getNameRequestVariable() . ':(?:SKIN|1|CAPE|2)}/{' .
@@ -63,17 +65,31 @@ class InitRequest
             );
             $r->addRoute(
                 HTTP::GET->name,
+                '/{' . ResponseTypeEnum::getNameRequestVariable() . ':(?:SKIN|1|CAPE|2)}/{' .
+                    'username:(?:[0-9]+|\w{2,16})}',
+                'resist',
+                ['type' => 'username']
+            );
+            $r->addRoute(
+                HTTP::GET->name,
+                '/{' . ResponseTypeEnum::getNameRequestVariable() . ':(?:SKIN|1|CAPE|2)}/{' .
+                    'uuid:(?:[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})}',
+                'resist',
+                ['type' => 'uuid']
+            );
+            $r->addRoute(
+                HTTP::GET->name,
                 '/{' . MethodTypeEnum::getNameRequestVariable() . ':(?:MOJANG|1|HYBRID|2)}/{username:\w{2,16}}/{uuid:[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}}',
                 'provider'
             );
             $r->addRoute(
                 HTTP::GET->name,
-                '/{' . ResponseTypeEnum::getNameRequestVariable() . ':(?:AVATAR|FRONT)}/{size:(?:[0-9]{2,3})}/{login:(?:[0-9]+|\w{2,16}|[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}|[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})}[{timestamp:(?:\?t=[0-9]{1,11}|\&t=[0-9]{1,11})}]',
+                '/{' . ResponseTypeEnum::getNameRequestVariable() . ':(?:AVATAR|FRONT|BACK|CAPE_RESIZE)}/{size:(?:[0-9]{2,3})}/{login:(?:[0-9]+|\w{2,16}|[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}|[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})}[{timestamp:(?:\?t=[0-9]{1,11}|\&t=[0-9]{1,11})}]',
                 'returner'
             );
             $r->addRoute(
                 HTTP::GET->name,
-                '/{' . ResponseTypeEnum::getNameRequestVariable() . ':(?:AVATAR|FRONT)}/{login:(?:[0-9]+|\w{2,16}|[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}|[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})}[{timestamp:(?:\?t=[0-9]{1,11}|\&t=[0-9]{1,11})}]',
+                '/{' . ResponseTypeEnum::getNameRequestVariable() . ':(?:AVATAR|FRONT|BACK|CAPE_RESIZE)}/{login:(?:[0-9]+|\w{2,16}|[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}|[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})}[{timestamp:(?:\?t=[0-9]{1,11}|\&t=[0-9]{1,11})}]',
                 'returner'
             );
             $r->addRoute(
@@ -91,8 +107,11 @@ class InitRequest
                 '/api/upload/{' . ResponseTypeEnum::getNameRequestVariable() . ':(?:SKIN|1|CAPE|2)}',
                 'upload_api'
             );
-        });
-
+        }, [
+            'cacheKey' => __DIR__ . '/../cache/route.cache', /* required */
+            'cacheDisabled' => false,     /* optional, enabled by default */
+            'cacheDriver' => \FastRoute\Cache\FileCache::class, /* optional, class name or instance of the cache driver - defaults to file cache */
+        ]);
         /**
          * @var string $_SERVER['REQUEST_METHOD']
          * @var string $_SERVER['REQUEST_URI']
@@ -111,6 +130,31 @@ class InitRequest
                 case 'provider':
                     if (($this->requestParams = (new RequestParamsProvider)->fromRoute($this->routeInfo->variables))->responseType === ResponseTypeEnum::JSON) new BearerToken;
                     JsonResponse::response(new TextureProvider(new User($this->requestParams)));
+                    break;
+                case 'resist':
+                    $this->requestParams = (new RequestParamsProvider)->fromRoute($this->routeInfo->variables)
+                        ->withEnum(TextureStorageTypeEnum::STORAGE);
+                    if ($this->routeInfo->extraParameters['type'] === 'username') {
+                        $MODULE_ARRAY_DATA = MainConfig::MODULES['TextureProvider'];
+                        $table_users = $MODULE_ARRAY_DATA['table_user']['TABLE_NAME'];
+                        $username_column = $MODULE_ARRAY_DATA['table_user']['username_column'];
+                        $uuid_column = $MODULE_ARRAY_DATA['table_user']['uuid_column'];
+                        /** @var string|null $uuid */
+                        $uuid = SingletonConnector::get('TextureProvider')->query(<<<SQL
+                        SELECT $uuid_column
+                        FROM $table_users
+                        WHERE $username_column = ?
+                    SQL, "s", $this->requestParams->{$this->routeInfo->extraParameters['type']})->value();
+                        $this->requestParams->setVariable('uuid', $uuid);
+                    } else {
+                        $this->requestParams->setVariable('username', '__USERNAME__');
+                    }
+                    /** @var ResponseTypeEnum */
+                    $responseType = $this->requestParams->responseType;
+                    $this->requestParams = $this->requestParams->withEnum(ResponseTypeEnum::JSON);
+                    $textureProvider = new TextureProvider(new User($this->requestParams));
+                    putenv("USER_STORAGE_TYPE=" . strtoupper($this->routeInfo->extraParameters['type']));
+                    TextureProvider::ResponseTexture($textureProvider->{strtolower($responseType->name)}->data);
                     break;
                 case 'upload':
                     // Token signature verification and get username, uuid out JWT
@@ -157,18 +201,30 @@ class InitRequest
                     switch ($this->requestParams->responseType) {
                         case ResponseTypeEnum::AVATAR:
                         case ResponseTypeEnum::FRONT:
+                        case ResponseTypeEnum::BACK:
+                        case ResponseTypeEnum::CAPE_RESIZE:
                             /** @var string $this->requestParams->login */
                             $filename = Texture::PATH($this->requestParams->responseType, $this->requestParams->login, Texture::EXTENSTION(), $size);
                             if (!file_exists($filename)) {
-                                Cache::saveCacheFile(
+                                $GD = (new GDUtils(
+                                    $this->requestParams->responseType,
+                                    match ($this->requestParams->responseType) {
+                                        ResponseTypeEnum::AVATAR, ResponseTypeEnum::FRONT, ResponseTypeEnum::BACK => TextureProvider::getSkinData($this->requestParams->login),
+                                        default => null
+                                    },
+                                    match ($this->requestParams->responseType) {
+                                        ResponseTypeEnum::CAPE_RESIZE => TextureProvider::getCapeData($this->requestParams->login),
+                                        default => null
+                                    },
+                                    $size
+                                ));
+                                Cache::saveGDTexture(
                                     $this->requestParams->login,
-                                    GDUtils::{strtolower($this->requestParams->responseType->name)}(
-                                        GDUtils::pre_calculation(TextureProvider::getSkinDataForAvatar($this->requestParams->login)),
-                                        $size
-                                    ),
+                                    $GD->getResultGD(),
                                     $this->requestParams->responseType,
                                     $size
                                 );
+                                TextureProvider::ResponseTexture($GD->getResultData(), time());
                             }
                             TextureProvider::ResponseTexture(Cache::loadCacheFile($filename), Cache::getLastModified($filename));
                             break;

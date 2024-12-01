@@ -17,7 +17,16 @@ CREATE TABLE IF NOT EXISTS `user_assets` (
   KEY `uid_name` (`user_id`,`type`) USING BTREE,
   CONSTRAINT `FK_user_assets_from_users` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
+-- CREATE TABLE `user_assets` (
+-- 	`user_id` INT(10) UNSIGNED NOT NULL,
+-- 	`type` ENUM('SKIN','CAPE') NOT NULL,
+-- 	`hash` TINYTEXT NOT NULL,
+-- 	`meta` ENUM('SLIM') NULL DEFAULT NULL,
+-- 	PRIMARY KEY (`user_id`, `type`) USING BTREE,
+-- 	INDEX `uid` (`user_id`) USING BTREE,
+-- 	INDEX `uid_name` (`user_id`, `type`) USING BTREE,
+-- 	CONSTRAINT `FK_user_assets_from_users` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION
+-- ) COLLATE='utf8mb4_general_ci' ENGINE=InnoDB;
 /*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
 /*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;

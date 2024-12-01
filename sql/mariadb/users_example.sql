@@ -31,3 +31,27 @@ CREATE TABLE IF NOT EXISTS `users` (
 /*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40111 SET SQL_NOTES=IFNULL(@OLD_SQL_NOTES, 1) */;
+CREATE TYPE "texture_provider_assets_meta" AS ENUM (
+  'SLIM');
+
+CREATE TYPE "texture_provider_assets_type" AS ENUM (
+  'SKIN',
+  'CAPE');
+
+CREATE TABLE texture_provider_users (
+  id serial4 NOT NULL,
+  username varchar NULL,
+  "uuid" varchar NULL,
+  CONSTRAINT pk PRIMARY KEY (id),
+  CONSTRAINT username_un UNIQUE (username),
+  CONSTRAINT uuid_un UNIQUE (uuid)
+);
+
+CREATE TABLE texture_provider_user_assets (
+  user_id int4 NOT NULL,
+  "type" "texture_provider_assets_type" NOT NULL,
+  hash varchar NULL,
+  "meta" "texture_provider_assets_meta" NULL,
+  CONSTRAINT assets_pk PRIMARY KEY (user_id, type),
+  CONSTRAINT assets_users_fk FOREIGN KEY (user_id) REFERENCES texture_provider_users(id)
+);

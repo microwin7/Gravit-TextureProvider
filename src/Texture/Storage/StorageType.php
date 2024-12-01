@@ -34,28 +34,48 @@ class StorageType
     private readonly    FileSystem          $fileSystem;
 
     function __construct(
-        public          ?string             $skinID,
+        public          ?string            &$skinID,
         public          ?true               $isSlim,
-        public          ?string             $capeID,
+        public          ?string            &$capeID,
         ResponseTypeEnum    $responseType
     ) {
         $this->fileSystem = new FileSystem;
-        if ($this->skinID !== null && in_array($responseType, [ResponseTypeEnum::JSON, ResponseTypeEnum::SKIN, ResponseTypeEnum::AVATAR])) {
+        if ($this->skinID !== null && in_array($responseType, [
+            ResponseTypeEnum::JSON,
+            ResponseTypeEnum::SKIN,
+            ResponseTypeEnum::AVATAR,
+            ResponseTypeEnum::FRONT,
+            ResponseTypeEnum::FRONT_WITH_CAPE,
+            ResponseTypeEnum::BACK,
+            ResponseTypeEnum::BACK_WITH_CAPE,
+        ])) {
             $this->getSkinData();
             if ($this->skinData !== null) {
-                if ($responseType !== ResponseTypeEnum::JSON && $responseType !== ResponseTypeEnum::AVATAR) $this->skinResize();
-                if ($responseType === ResponseTypeEnum::SKIN) Texture::ResponseTexture($this->skinData, $this->skinLastModified);
-                if ($responseType !== ResponseTypeEnum::AVATAR) {
+                if ($responseType === ResponseTypeEnum::JSON) {
                     $this->skinUrl = $this->getSkinUrl($responseType);
-                    $this->skinSlim = $this->checkIsSlim();
+                    $this->isSlim === null ? $this->skinSlim = GDUtils::slim($this->skinData) : $this->skinSlim = $this->isSlim;
+                }
+                if ($responseType === ResponseTypeEnum::SKIN) {
+                    // $this->skinResize();
+                    Texture::ResponseTexture($this->skinData, $this->skinLastModified);
                 }
             }
         }
-        if ($this->capeID !== null && in_array($responseType, [ResponseTypeEnum::JSON, ResponseTypeEnum::CAPE])) {
+        if ($this->capeID !== null && in_array($responseType, [
+            ResponseTypeEnum::JSON,
+            ResponseTypeEnum::CAPE,
+            ResponseTypeEnum::FRONT_CAPE,
+            ResponseTypeEnum::FRONT_WITH_CAPE,
+            ResponseTypeEnum::BACK_CAPE,
+            ResponseTypeEnum::BACK_WITH_CAPE,
+            ResponseTypeEnum::CAPE_RESIZE,
+        ])) {
             $this->getCapeData();
             if ($this->capeData !== null) {
+                if ($responseType === ResponseTypeEnum::JSON) {
+                    $this->capeUrl = $this->getCapeUrl();
+                }
                 if ($responseType === ResponseTypeEnum::CAPE) Texture::ResponseTexture($this->capeData, $this->capeLastModified);
-                $this->capeUrl = $this->getCapeUrl();
             }
         }
     }
@@ -89,25 +109,6 @@ class StorageType
             }
         }
     }
-    private function skinResize(): void
-    {
-        /**
-         * @var string $this->skinData
-         * @var string $this->skinID
-         */
-        if (Config::SKIN_RESIZE()) {
-            try {
-                $this->skinData = GDUtils::skin_resize($this->skinData);
-            } catch (TypeError $e) {
-                throw new TypeError(sprintf(
-                    '%s' . PHP_EOL . '%s' . PHP_EOL . '%s',
-                    $e->getMessage(),
-                    'StorageType: ' . __CLASS__,
-                    'With skinID: ' . $this->skinID,
-                ));
-            }
-        }
-    }
     private function getSkinUrl(ResponseTypeEnum $responseType): string
     {
         $requestParams = new RequestParams;
@@ -116,24 +117,6 @@ class StorageType
             ->withEnum(TextureStorageTypeEnum::STORAGE)
             ->setVariable('login', $this->skinID);
         return (string)$requestParams;
-    }
-    private function checkIsSlim(): bool
-    {
-        /**
-         * @var string $this->skinData
-         * @var string $this->skinID
-         */
-        if ($this->isSlim) return $this->isSlim;
-        try {
-            return GDUtils::slim($this->skinData);
-        } catch (TypeError $e) {
-            throw new TypeError(sprintf(
-                '%s' . PHP_EOL . '%s' . PHP_EOL . '%s',
-                $e->getMessage(),
-                'StorageType: ' . __CLASS__,
-                'With skinID: ' . $this->skinID,
-            ));
-        }
     }
     private function getCapeData(): void
     {

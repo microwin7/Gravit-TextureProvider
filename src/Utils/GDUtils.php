@@ -3,93 +3,155 @@
 namespace Microwin7\TextureProvider\Utils;
 
 use GdImage;
-use Microwin7\PHPUtils\Utils\GDUtils as UtilsGDUtils;
+use Microwin7\PHPUtils\Contracts\Texture\Enum\ResponseTypeEnum;
 use Microwin7\TextureProvider\Config;
+use Microwin7\TextureProvider\Data\TextureProperty;
+use Microwin7\PHPUtils\Utils\GDUtils as UtilsGDUtils;
 
 class GDUtils extends UtilsGDUtils
 {
-    public static function skin_resize(string $data): string
-    {
-        if (Config::SKIN_RESIZE()) {
-            [$image, $x, $y, $fraction] = self::pre_calculation($data);
-            if ($x / 2 == $y) {
-                $canvas = self::create_canvas_transparent($x, $x);
-                imagecopy($canvas, $image, 0, 0, 0, 0, $x, $y);
-                /** @var int $f_part */
-                $f_part = $fraction / 2;
+    // public TextureProperty|null $skinProperty = null;
+    // public TextureProperty|null $capeProperty = null;
+    private \GdImage|null $canvas = null;
 
-                $left_leg = $left_arm = self::create_canvas_transparent($f_part * 3, $f_part * 3); // 12x12
-                imagecopy($left_leg, $image, 0, 0, 0, $f_part * 5, $f_part * 3, $fraction * 4); // 0, 20 >> 12, 32
-                imageflip($left_leg, IMG_FLIP_HORIZONTAL);
-                imagecopy($canvas, $left_leg, $fraction * 2, $f_part * 13, 0, 0, $f_part * 3, $f_part * 3);
+    // case FRONT_CAPE         = 5;
+    // case FRONT_WITH_CAPE    = 6;
+    // case BACK_CAPE          = 8;
+    // case BACK_WITH_CAPE     = 9;
+    public function __construct(
+        ResponseTypeEnum $needResult,
+        string|null $skinData = null,
+        string|null $capeData = null,
+        int|null $needSize = null,
+        public TextureProperty|null &$skinProperty = null,
+        public TextureProperty|null &$capeProperty = null,
 
-                $left_leg2 = $left_arm2 = self::create_canvas_transparent($f_part, $f_part * 3); // 4x12
-                imagecopy($left_leg2, $image, 0, 0, $f_part * 3, $f_part * 5, $fraction * 2, $fraction * 4); // 12, 20 >> 16, 32
-                imageflip($left_leg2, IMG_FLIP_HORIZONTAL);
-                imagecopy($canvas, $left_leg2, $f_part * 7, $f_part * 13, 0, 0, $f_part, $f_part * 3);
+    ) {
+        if ($skinProperty === null && $skinData !== null) $this->skinProperty = new TextureProperty($skinData);
+        if ($capeProperty === null && $capeData !== null) $this->capeProperty = new TextureProperty($capeData);
 
-                imagecopy($left_arm, $image, 0, 0, $fraction * 5, $f_part * 5, $f_part * 13, $fraction * 4); // 40, 20 >> 52, 32
-                imageflip($left_arm, IMG_FLIP_HORIZONTAL);
-                imagecopy($canvas, $left_arm, $fraction * 4, $f_part * 13, 0, 0, $f_part * 3, $f_part * 3);
-
-                imagecopy($left_arm2, $image, 0, 0, $f_part * 13, $f_part * 5, $fraction * 7, $fraction * 4); // 52, 20 >> 56, 32
-                imageflip($left_arm2, IMG_FLIP_HORIZONTAL);
-                imagecopy($canvas, $left_arm2, $f_part * 11, $f_part * 13, 0, 0, $f_part, $f_part * 3);
-
-                $square = $square2 = $square3 = $square4 = self::create_canvas_transparent($f_part, $f_part); //4x4
-                imagecopy($square, $image, 0, 0, $f_part, $fraction * 2, $fraction, $f_part * 5); // 4, 16 >> 8, 20
-                imageflip($square, IMG_FLIP_HORIZONTAL);
-                imagecopy($canvas, $square, $f_part * 5, $fraction * 6, 0, 0, $f_part, $f_part);
-
-                imagecopy($square2, $image, 0, 0, $fraction, $fraction * 2, $f_part * 3, $f_part * 5); // 8, 16 >> 12, 20
-                imageflip($square2, IMG_FLIP_HORIZONTAL);
-                imagecopy($canvas, $square2, $fraction * 3, $fraction * 6, 0, 0, $f_part, $f_part);
-
-                imagecopy($square3, $image, 0, 0, $f_part * 11, $fraction * 2, $fraction * 6, $f_part * 5); // 44, 16 >> 48, 20
-                imageflip($square3, IMG_FLIP_HORIZONTAL);
-                imagecopy($canvas, $square3, $f_part * 9, $fraction * 6, 0, 0, $f_part, $f_part);
-
-                imagecopy($square4, $image, 0, 0, $fraction * 6, $fraction * 2, $f_part * 13, $f_part * 5); // 48, 16 >> 52, 20
-                imageflip($square4, IMG_FLIP_HORIZONTAL);
-                imagecopy($canvas, $square4, $fraction * 5, $fraction * 6, 0, 0, $f_part, $f_part);
-
-                ob_start();
-                imagepng($canvas);
-                $data = ob_get_clean();
+        if ($needResult === ResponseTypeEnum::SKIN_RESIZE && $this->skinProperty !== null) {
+            if (Config::SKIN_RESIZE() && ($this->skinProperty->w / 2 === $this->skinProperty->h)) {
+                $this->canvas = parent::create_canvas_transparent($this->skinProperty->w, $this->skinProperty->w);
+                imagecopy($this->canvas, $this->skinProperty->image, 0, 0, 0, 0, $this->skinProperty->w, $this->skinProperty->h);
+                $this->skin_resize();
+            } else {
+                $this->canvas = $this->skinProperty->image;
             }
         }
-        return $data;
+        if ($needResult === ResponseTypeEnum::FRONT && $this->skinProperty !== null && $needSize !== null) {
+            $this->canvas = parent::create_canvas_transparent($needSize, $needSize * 2);
+            $this->front($needSize);
+        }
+        // if ($needResult === ResponseTypeEnum::FRONT_CAPE && $this->capeProperty !== null && $needSize !== null) {
+        //     $cape_canvas = (new self(
+        //         ResponseTypeEnum::CAPE_RESIZE,
+        //         needSize: 1,
+        //         capeProperty: $this->capeProperty
+        //     ))->getResultGD();
+        //     $this->canvas = self::create_canvas_transparent(imagesx($cape_canvas), imagesy($cape_canvas));
+        //     $this->front_cape($needSize);
+        // }
+        if ($needResult === ResponseTypeEnum::BACK && $this->skinProperty !== null && $needSize !== null) {
+            $this->canvas = parent::create_canvas_transparent($needSize, $needSize * 2);
+            $this->back($needSize);
+        }
+        if ($needResult === ResponseTypeEnum::CAPE_RESIZE && $this->capeProperty !== null && $needSize !== null) {
+            $this->canvas = parent::create_canvas_transparent($needSize * 22, $needSize * 17);
+            $this->cape_resize($needSize);
+        }
+        if ($needResult === ResponseTypeEnum::AVATAR && $this->skinProperty !== null && $needSize !== null) {
+            $this->canvas = parent::create_canvas_transparent($needSize, $needSize);
+            $this->avatar($needSize);
+        }
     }
-    /**
-     * @param array{0: GdImage, 1: int, 2: int, 3: int} $data
-     * @psalm-suppress PossiblyUnusedMethod
-     * size не меньше 64 сделать и кратным 64
-     * ПОМЕНЯТЬ ПРОВЕРКУ РАЗМЕРА БЛОКА
-     */
-    public static function front(array $data, int $size): GdImage
+    public function getResultGD(): \GdImage
     {
-        [$gdImage, $x, $y, $fraction] = $data;
-        $isSlim = parent::checkSkinSlimFromImage($gdImage);
-        $canvas = parent::create_canvas_transparent($size, $size * 2);
+        return $this->canvas ?? throw new \RuntimeException('Canvas result null');
+    }
+    public function getResultData(): string
+    {
+        ob_start();
+        imagepng($this->canvas ?? throw new \RuntimeException('Canvas result null'));
+        return ob_get_clean();
+    }
+    /** Transorm skin 2x1 to 2x2 */
+    private function skin_resize(): void
+    {
+        /**
+         * @var TextureProperty $this->skinProperty
+         * @var \GdImage $this->canvas
+         */
+        $fraction = $this->skinProperty->fraction;
         /** @var int $f_part */
         $f_part = $fraction / 2;
 
+        $left_leg = $left_arm = parent::create_canvas_transparent($f_part * 3, $f_part * 3); // 12x12
+        imagecopy($left_leg, $this->skinProperty->image, 0, 0, 0, $f_part * 5, $f_part * 3, $fraction * 4); // 0, 20 >> 12, 32
+        imageflip($left_leg, IMG_FLIP_HORIZONTAL);
+        imagecopy($this->canvas, $left_leg, $fraction * 2, $f_part * 13, 0, 0, $f_part * 3, $f_part * 3);
+
+        $left_leg2 = $left_arm2 = parent::create_canvas_transparent($f_part, $f_part * 3); // 4x12
+        imagecopy($left_leg2, $this->skinProperty->image, 0, 0, $f_part * 3, $f_part * 5, $fraction * 2, $fraction * 4); // 12, 20 >> 16, 32
+        imageflip($left_leg2, IMG_FLIP_HORIZONTAL);
+        imagecopy($this->canvas, $left_leg2, $f_part * 7, $f_part * 13, 0, 0, $f_part, $f_part * 3);
+
+        imagecopy($left_arm, $this->skinProperty->image, 0, 0, $fraction * 5, $f_part * 5, $f_part * 13, $fraction * 4); // 40, 20 >> 52, 32
+        imageflip($left_arm, IMG_FLIP_HORIZONTAL);
+        imagecopy($this->canvas, $left_arm, $fraction * 4, $f_part * 13, 0, 0, $f_part * 3, $f_part * 3);
+
+        imagecopy($left_arm2, $this->skinProperty->image, 0, 0, $f_part * 13, $f_part * 5, $fraction * 7, $fraction * 4); // 52, 20 >> 56, 32
+        imageflip($left_arm2, IMG_FLIP_HORIZONTAL);
+        imagecopy($this->canvas, $left_arm2, $f_part * 11, $f_part * 13, 0, 0, $f_part, $f_part * 3);
+
+        $square = $square2 = $square3 = $square4 = parent::create_canvas_transparent($f_part, $f_part); //4x4
+        imagecopy($square, $this->skinProperty->image, 0, 0, $f_part, $fraction * 2, $fraction, $f_part * 5); // 4, 16 >> 8, 20
+        imageflip($square, IMG_FLIP_HORIZONTAL);
+        imagecopy($this->canvas, $square, $f_part * 5, $fraction * 6, 0, 0, $f_part, $f_part);
+
+        imagecopy($square2, $this->skinProperty->image, 0, 0, $fraction, $fraction * 2, $f_part * 3, $f_part * 5); // 8, 16 >> 12, 20
+        imageflip($square2, IMG_FLIP_HORIZONTAL);
+        imagecopy($this->canvas, $square2, $fraction * 3, $fraction * 6, 0, 0, $f_part, $f_part);
+
+        imagecopy($square3, $this->skinProperty->image, 0, 0, $f_part * 11, $fraction * 2, $fraction * 6, $f_part * 5); // 44, 16 >> 48, 20
+        imageflip($square3, IMG_FLIP_HORIZONTAL);
+        imagecopy($this->canvas, $square3, $f_part * 9, $fraction * 6, 0, 0, $f_part, $f_part);
+
+        imagecopy($square4, $this->skinProperty->image, 0, 0, $fraction * 6, $fraction * 2, $f_part * 13, $f_part * 5); // 48, 16 >> 52, 20
+        imageflip($square4, IMG_FLIP_HORIZONTAL);
+        imagecopy($this->canvas, $square4, $fraction * 5, $fraction * 6, 0, 0, $f_part, $f_part);
+    }
+    /**
+     * size не меньше 64 сделать и кратным 64
+     * ПОМЕНЯТЬ ПРОВЕРКУ РАЗМЕРА БЛОКА
+     */
+    private function front(int $size): void
+    {
+        /**
+         * @var TextureProperty $this->skinProperty
+         * @var \GdImage $this->canvas
+         */
+        $isSlim = parent::checkSkinSlimFromImage($this->skinProperty->image);
+
+        /** @var int $f_part */
+        $f_part = $this->skinProperty->fraction / 2;
+
         $block_size = (int) ($size / 2); // 128 -> 64
         $block_size_1_2 = (int) ($block_size / 2); // 32
-        
+
         $block_size_3_2 = $block_size_1_2 * 3; // 96
         $block_size_under = self::size_under($block_size); // 58
         $block_size_indent = (int) (($block_size - $block_size_under) / 2); // 3
         $block_size_indent_1_2 = (int) ($block_size_indent / 2); // 1.5 ERROR
-        $canvas_arm_right = GDUtils::create_canvas_transparent($block_size_1_2, $block_size_3_2);
-        $canvas_arm_left = GDUtils::create_canvas_transparent($block_size_1_2, $block_size_3_2);
-        $canvas_leg_right = GDUtils::create_canvas_transparent($block_size_1_2, $block_size_3_2);
-        $canvas_leg_left = GDUtils::create_canvas_transparent($block_size_1_2, $block_size_3_2);
+        $canvas_arm_right = parent::create_canvas_transparent($block_size_1_2, $block_size_3_2);
+        $canvas_arm_left = parent::create_canvas_transparent($block_size_1_2, $block_size_3_2);
+        $canvas_leg_right = parent::create_canvas_transparent($block_size_1_2, $block_size_3_2);
+        $canvas_leg_left = parent::create_canvas_transparent($block_size_1_2, $block_size_3_2);
 
         // BODY 1
         imagecopyresized(
-            $canvas,
-            $gdImage,
+            $this->canvas,
+            $this->skinProperty->image,
             $block_size_1_2 + $block_size_indent,
             $block_size,
             $f_part * 5,
@@ -103,7 +165,7 @@ class GDUtils extends UtilsGDUtils
         // RL 1
         imagecopyresized(
             $canvas_leg_right,
-            $gdImage,
+            $this->skinProperty->image,
             $block_size_indent_1_2,
             $block_size_indent_1_2,
             $f_part * 1,
@@ -113,11 +175,11 @@ class GDUtils extends UtilsGDUtils
             $f_part * 1,
             $f_part * 3
         );
-        if ($x === $y) {
+        if ($this->skinProperty->w === $this->skinProperty->h) {
             // LL 1
             imagecopyresized(
                 $canvas_leg_left,
-                $gdImage,
+                $this->skinProperty->image,
                 $block_size_indent_1_2,
                 $block_size_indent_1_2,
                 $f_part * 5,
@@ -130,7 +192,7 @@ class GDUtils extends UtilsGDUtils
             // RL 2
             imagecopyresized(
                 $canvas_leg_right,
-                $gdImage,
+                $this->skinProperty->image,
                 0,
                 0,
                 $f_part * 1,
@@ -143,7 +205,7 @@ class GDUtils extends UtilsGDUtils
             // LL 2
             imagecopyresized(
                 $canvas_leg_left,
-                $gdImage,
+                $this->skinProperty->image,
                 0,
                 0,
                 $f_part * 1,
@@ -158,7 +220,7 @@ class GDUtils extends UtilsGDUtils
             imageflip($canvas_leg_left, IMG_FLIP_HORIZONTAL);
         }
         imagecopy(
-            $canvas,
+            $this->canvas,
             $canvas_leg_right,
             $block_size_1_2 + $block_size_indent_1_2,
             $block_size + $block_size_3_2 - $block_size_indent - $block_size_indent_1_2,
@@ -168,7 +230,7 @@ class GDUtils extends UtilsGDUtils
             imagesy($canvas_leg_right)
         );
         imagecopy(
-            $canvas,
+            $this->canvas,
             $canvas_leg_left,
             $block_size - $block_size_indent_1_2,
             $block_size + $block_size_3_2 - $block_size_indent - $block_size_indent_1_2,
@@ -183,7 +245,7 @@ class GDUtils extends UtilsGDUtils
             // RA 1
             imagecopyresized(
                 $canvas_arm_right,
-                $gdImage,
+                $this->skinProperty->image,
                 $block_size_indent_1_2,
                 $block_size_indent_1_2,
                 $f_part * 11,
@@ -197,7 +259,7 @@ class GDUtils extends UtilsGDUtils
             // RA 1 SLIM | ALWAYS X === Y
             imagecopyresized(
                 $canvas_arm_right,
-                $gdImage,
+                $this->skinProperty->image,
                 $block_size_indent_1_2 + ($block_size_1_2 / 4),
                 $block_size_indent_1_2,
                 $f_part * 11,
@@ -209,12 +271,12 @@ class GDUtils extends UtilsGDUtils
             );
         }
 
-        if ($x === $y) {
+        if ($this->skinProperty->w === $this->skinProperty->h) {
             if (!$isSlim) {
                 // LA 1
                 imagecopyresized(
                     $canvas_arm_left,
-                    $gdImage,
+                    $this->skinProperty->image,
                     $block_size_indent_1_2,
                     $block_size_indent_1_2,
                     $f_part * 9,
@@ -227,7 +289,7 @@ class GDUtils extends UtilsGDUtils
                 // RA 2
                 imagecopyresized(
                     $canvas_arm_right,
-                    $gdImage,
+                    $this->skinProperty->image,
                     0,
                     0,
                     $f_part * 11,
@@ -240,7 +302,7 @@ class GDUtils extends UtilsGDUtils
                 // LA 2
                 imagecopyresized(
                     $canvas_arm_left,
-                    $gdImage,
+                    $this->skinProperty->image,
                     0,
                     0,
                     $f_part * 13,
@@ -254,7 +316,7 @@ class GDUtils extends UtilsGDUtils
                 // LA 1 SLIM
                 imagecopyresized(
                     $canvas_arm_left,
-                    $gdImage,
+                    $this->skinProperty->image,
                     $block_size_indent_1_2,
                     $block_size_indent_1_2,
                     $f_part * 9,
@@ -267,7 +329,7 @@ class GDUtils extends UtilsGDUtils
                 // RA 2 SLIM
                 imagecopyresized(
                     $canvas_arm_right,
-                    $gdImage,
+                    $this->skinProperty->image,
                     $block_size_1_2 / 4,
                     0,
                     $f_part * 13,
@@ -280,7 +342,7 @@ class GDUtils extends UtilsGDUtils
                 // LA 2 SLIM
                 imagecopyresized(
                     $canvas_arm_left,
-                    $gdImage,
+                    $this->skinProperty->image,
                     0,
                     0,
                     $f_part * 13,
@@ -296,7 +358,7 @@ class GDUtils extends UtilsGDUtils
             imageflip($canvas_arm_left, IMG_FLIP_HORIZONTAL);
         }
         imagecopy(
-            $canvas,
+            $this->canvas,
             $canvas_arm_right,
             $block_size_indent + $block_size_indent_1_2,
             $block_size - $block_size_indent_1_2,
@@ -306,7 +368,7 @@ class GDUtils extends UtilsGDUtils
             imagesy($canvas_arm_right)
         );
         imagecopy(
-            $canvas,
+            $this->canvas,
             $canvas_arm_left,
             $block_size + $block_size_1_2 - $block_size_indent - $block_size_indent_1_2,
             $block_size - $block_size_indent_1_2,
@@ -315,11 +377,11 @@ class GDUtils extends UtilsGDUtils
             imagesx($canvas_arm_left),
             imagesy($canvas_arm_left)
         );
-        if ($x === $y) {
+        if ($this->skinProperty->w === $this->skinProperty->h) {
             // BODY 2
             imagecopyresized(
-                $canvas,
-                $gdImage,
+                $this->canvas,
+                $this->skinProperty->image,
                 $block_size_1_2 + ((int) ($block_size_indent / 4)),
                 $block_size,
                 $f_part * 5,
@@ -330,61 +392,59 @@ class GDUtils extends UtilsGDUtils
                 $f_part * 3
             );
         }
-
-
         // AVATAR
-        imagecopy($canvas, self::avatar($data, $block_size), $block_size_1_2, $block_size_indent, 0, 0, $block_size, $block_size);
-        return $canvas;
+        imagecopy($this->canvas, (new self(ResponseTypeEnum::AVATAR, needSize: $block_size, skinProperty: $this->skinProperty))->getResultGD(), $block_size_1_2, $block_size_indent, 0, 0, $block_size, $block_size);
     }
     /**
-     * @param array{0: GdImage, 1: int} $data
-     * @psalm-suppress PossiblyUnusedMethod
+     * Создано пока что только для скинов по шаблону 64x32
      */
-    public static function back(array $data, int $size): GdImage
+    private function back(int $size): void
     {
-        // Создано пока что только для скинов по шаблону 64x32
-        [$image, $fraction] = $data;
-        $canvas = GDUtils::create_canvas_transparent($size, $size * 2);
+        /**
+         * @var TextureProperty $this->skinProperty
+         * @var \GdImage $this->canvas
+         */
+        $fraction = $this->skinProperty->fraction;
         /** @var int $f_part */
         $f_part = $fraction / 2;
-        $canvas_back = GDUtils::create_canvas_transparent($fraction * 2, $fraction * 4);
-        $canvas_arm = GDUtils::create_canvas_transparent($f_part, $f_part * 3);
+        $canvas_back = parent::create_canvas_transparent($fraction * 2, $fraction * 4);
+        $canvas_arm = parent::create_canvas_transparent($f_part, $f_part * 3);
         $canvas_leg = $canvas_arm;
         // Head
-        imagecopy($canvas_back, $image, $f_part, 0, $fraction * 3, $fraction, $fraction, $fraction);
+        imagecopy($canvas_back, $this->skinProperty->image, $f_part, 0, $fraction * 3, $fraction, $fraction, $fraction);
         //Helmet
-        imagecopy($canvas_back, $image, $f_part, 0, $fraction * 7, $fraction, $fraction, $fraction);
+        imagecopy($canvas_back, $this->skinProperty->image, $f_part, 0, $fraction * 7, $fraction, $fraction, $fraction);
         // Torso
-        imagecopy($canvas_back, $image, $f_part, $f_part * 2, $f_part * 8, $f_part * 5, $f_part * 2, $f_part * 3);
+        imagecopy($canvas_back, $this->skinProperty->image, $f_part, $f_part * 2, $f_part * 8, $f_part * 5, $f_part * 2, $f_part * 3);
         //Left Arm
-        imagecopy($canvas_arm, $image, 0, 0, $f_part * 13, $f_part * 5, $f_part, $f_part * 3);
+        imagecopy($canvas_arm, $this->skinProperty->image, 0, 0, $f_part * 13, $f_part * 5, $f_part, $f_part * 3);
         imagecopy($canvas_back, $canvas_arm, $f_part * 3, $f_part * 2, 0, 0, $f_part, $f_part * 3);
         //Right Arm
         imageflip($canvas_arm, IMG_FLIP_HORIZONTAL);
         imagecopy($canvas_back, $canvas_arm, 0, $f_part * 2, 0, 0, $f_part, $f_part * 3);
         //Left Leg
-        imagecopy($canvas_leg, $image, 0, 0, $f_part * 3, $f_part * 5, $f_part, $f_part * 3);
+        imagecopy($canvas_leg, $this->skinProperty->image, 0, 0, $f_part * 3, $f_part * 5, $f_part, $f_part * 3);
         imagecopy($canvas_back, $canvas_leg, $f_part * 2, $f_part * 5, 0, 0, $f_part, $f_part * 3);
         //Right Leg
         imageflip($canvas_leg, IMG_FLIP_HORIZONTAL);
         imagecopy($canvas_back, $canvas_leg, $f_part, $f_part * 5, 0, 0, $f_part, $f_part * 3);
         //Resize
-        imagecopyresized($canvas, $canvas_back, 0, 0, 0, 0,   $size, $size * 2, $fraction * 2, $fraction * 4);
-        return $canvas;
+        imagecopyresized($this->canvas, $canvas_back, 0, 0, 0, 0,   $size, $size * 2, $fraction * 2, $fraction * 4);
     }
-    /**
-     * @param array{0: GdImage, 1: int, 2: int, 3: int} $data
-     */
-    public static function avatar(array $data, int $size): GdImage
+
+    private function avatar(int $size): void
     {
-        [$image, $_, $_, $fraction] = $data;
-        $canvas = GDUtils::create_canvas_transparent($size, $size);
+        /**
+         * @var TextureProperty $this->skinProperty
+         * @var \GdImage $this->canvas
+         */
+        $fraction = $this->skinProperty->fraction;
         $size_under = self::size_under($size);
         /** @var int $size_indent */
         $size_indent = ($size - $size_under) / 2;
         imagecopyresized(
-            $canvas,
-            $image,
+            $this->canvas,
+            $this->skinProperty->image,
             $size_indent,
             $size_indent,
             $fraction,
@@ -395,8 +455,8 @@ class GDUtils extends UtilsGDUtils
             $fraction
         );
         imagecopyresized(
-            $canvas,
-            $image,
+            $this->canvas,
+            $this->skinProperty->image,
             0,
             0,
             $fraction * 5,
@@ -406,7 +466,6 @@ class GDUtils extends UtilsGDUtils
             $fraction,
             $fraction
         );
-        return $canvas;
     }
     /** Коэфициент от блока */
     private static function size_under(int $size): int
@@ -416,28 +475,27 @@ class GDUtils extends UtilsGDUtils
         return $size_under;
     }
     /**
-     * @psalm-suppress PossiblyUnusedMethod
      * @param int $size - размер одного пикселя
      */
-    public static function cape_resize(string $data, int $size): GdImage
+    private function cape_resize(int $size): void
     {
-        $image = imagecreatefromstring($data);
-        $width = imagesx($image);
-        /** @var int $fraction */
-        $fraction = $width / 64;
-        $canvas = GDUtils::create_canvas_transparent($size * 22, $size * 17);
+        /**
+         * @var TextureProperty $this->capeProperty
+         * @var \GdImage $this->canvas
+         * @var int $f_part
+         */
+        $f_part = $this->capeProperty->fraction / 8;
         imagecopyresized(
-            $canvas,
-            $image,
+            $this->canvas,
+            $this->capeProperty->image,
             0,
             0,
             0,
             0,
             $size * 22,
             $size * 17,
-            $fraction * 22,
-            $fraction * 17
+            $f_part * 22,
+            $f_part * 17
         );
-        return $canvas;
     }
 }

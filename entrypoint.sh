@@ -44,6 +44,9 @@ if [[ $(stat -c "%u" ${PWD}/storage) != "$USER_ID" ]]; then
     chown -R ${runAsUser}:${runAsGroup} ${PWD}/storage
 fi
 
+printf "Clean Route Cache ...\n"
+rm -f ${PWD}/cache/route.cache
+
 printf "\033[39mYou \033[33mGateway\033[39m Addr for connect \033[33mDB\033[39m in Hosting: \033[33m$(ip -4 route show default | cut -d" " -f3)\033[39m\n"
 
 exec "$@"

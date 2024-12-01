@@ -6,7 +6,10 @@ use Microwin7\PHPUtils\Utils\Texture;
 use Microwin7\TextureProvider\Config;
 use Microwin7\PHPUtils\Helpers\FileSystem;
 use Microwin7\PHPUtils\Response\JsonResponse;
+use Microwin7\TextureProvider\Data\TextureProperty;
+use Microwin7\PHPUtils\Exceptions\FileSystemException;
 use Microwin7\PHPUtils\Exceptions\NeedRe_GenerateCache;
+use Microwin7\PHPUtils\Contracts\Texture\Enum\ResponseTypeEnum;
 use Microwin7\PHPUtils\Contracts\Texture\Enum\TextureStorageTypeEnum;
 
 class IndexSkinRandomCollection
@@ -56,6 +59,13 @@ class IndexSkinRandomCollection
                     $index = $fileData[$modulo];
                     $filename = Texture::TEXTURE_STORAGE_FULL_PATH(TextureStorageTypeEnum::COLLECTION) . $index->file;
                     ($data = file_get_contents($filename)) !== false ?: throw new NeedRe_GenerateCache;
+                    if (Config::SKIN_RESIZE()) {
+                        $textureProperty = new TextureProperty($data);
+                        if (($textureProperty->w / 2) === $textureProperty->h) {
+                            $data = (new GDUtils(ResponseTypeEnum::SKIN_RESIZE, skinProperty: $textureProperty))->getResultData();
+                            file_put_contents($filename, $data) !== false ?: throw FileSystemException::createForbidden(dirname($filename));
+                        }
+                    }
                     $hash = Texture::digest($data);
                     if ($index->hash !== $hash) throw new NeedRe_GenerateCache;
                     return [$data, Cache::getLastModified($filename)];

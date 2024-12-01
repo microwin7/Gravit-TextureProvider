@@ -1,7 +1,15 @@
-cache/*
-!cache/.gitkeep
-storage/*
-!storage/.gitkeep
+/cache/*
+!/cache/.gitkeep
+!/storage/
+!/storage/.gitkeep
+/storage/*
+!/storage/skins
+/storage/skins/*
+!/storage/skins/98805f6ab41575b7ff4af11b70c074773c5bcc210f2429f6b5513150d746e4cd.png
+!/storage/skins/c6bddeda3e68acbb048f3961108a56bdb6b1397b0f56e72804f20b52ad19f5b8.png
+!/storage/capes
+/storage/capes/*
+!/storage/capes/f2072fdfff5302b7c13672e54fdc8895dc75b3f675be3a43245de6894f971e38.png
 /vendor/
 # Psalm
 log.txt

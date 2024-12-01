@@ -126,6 +126,19 @@ upstream dockerTextureProvider {
 - А в разделе server {...}
 ```nginx
     location /texture-provider/ {
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Env-Vendor null;
+        proxy_set_header App-Url "http://$host/";
+        proxy_set_header Script-Path "texture-provider";
+        proxy_set_header Ecdsa-Id-Pub "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJDi51DKs5f6ERSrDDjns00BkI963L9OS9wLA2Ak/nACZCgQma+FsTsbYtZQm4nk+rtabM8b9JgzSi3sPINb8fg==";
+        set $bearer_token "";
+        if ($request_uri ~ ^/texture-provider/api/) {
+            set $bearer_token "";
+        }
+        proxy_set_header Bearer-Token $bearer_token;
         proxy_pass http://dockerTextureProvider/;
     }
 ```
@@ -142,29 +155,84 @@ server {
     charset utf-8;
 
     location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Env-Vendor null;
+        proxy_set_header App-Url "http://$host/";
+        proxy_set_header Script-Path "";
+        proxy_set_header Ecdsa-Id-Pub "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJDi51DKs5f6ERSrDDjns00BkI963L9OS9wLA2Ak/nACZCgQma+FsTsbYtZQm4nk+rtabM8b9JgzSi3sPINb8fg==";
+        set $bearer_token "";
+        if ($request_uri ~ ^/api/) {
+            set $bearer_token "";
+        }
+        proxy_set_header Bearer-Token $bearer_token;
         proxy_pass http://dockerTextureProvider/;
     }
 }
 ```
 - Изменить **ВАШ_ДОМЕН**
-- Изменить **APP_URL** в `.env` - ссылка на домен
-- Выставить **SCRIPT_PATH=** пустым полем в `.env` - ссылка для обращения к провидеру, по отношениею к конрю сайта
+- Изменить в **proxy_set_header App-Url** протокол **http** или **https**
+##### Настройка публичного ключа доступа для загрузки скинов и плащей из лаунчера:
+- Перейдите в папку лаунчсервера, далее в папку `.keys`. Она может быть скрыта
+- Скопируйте себе на ПК файл `ecdsa_id.pub`
+- Через сайт [**[ base64.guru ]**](https://base64.guru/converter/encode/file) преобразуйте файл в строку Base64
+- Изменить в **proxy_set_header Ecdsa-Id-Pub** Base64 строку
+##### Настройка использования API загрузки, установите токен в условии обращения к /api
+- Любой пароль, желательно надёжный
+```
+if ($request_uri ~ ^/api/) {
+    set $bearer_token "";
+}
+```
+- Пример использования API:
+  - API загрузки скина: /api/upload/SKIN
+  - API загрузки плаща: /api/upload/CAPE
+```
+curl -X POST http://127.0.0.1:29300/api/upload/SKIN \
+-H "Authorization: Bearer BEARER_TOKEN" \
+-F "username=microwin7" \
+-F "uuid=36fdaf1d-c064-4d12-b1c6-ff0fd83636dd" \
+-F "hd_allow=false" \
+-F "file=@/tmp/phpJVBzIM"
+```
+  - `BEARER_TOKEN` - заменить на указанный в `$bearer_token` nginx
+  - Параметр `hd_allow` не обязательный, по умолчанию **true**, можно переобределить в **.env** установив **HD_TEXTURES_ALLOW=false**
+##### Смена скина/плаща по умолчанию через API
+- Выполнить запрос
+```
+curl -X POST http://127.0.0.1:29300/api/upload/SKIN \
+-H "Authorization: Bearer BEARER_TOKEN" \
+-F "username=DEFAULT" \
+-F "uuid=00000000-0000-0000-0000-000000000000" \
+-F "hd_allow=false" \
+-F "file=@/путь/к/скину"
+```
+Пример заполненного запроса с моего компьютера на хост:
+```
+curl -X POST https://gravit-support.ru/texture-provider-dev/api/upload/SKIN \
+-H "Authorization: Bearer ТОКЕН" \
+-F "username=DEFAULT" \
+-F "uuid=00000000-0000-0000-0000-000000000000" \
+-F "hd_allow=false" \
+-F "file=@microwin7.png"
+```
+- Из полученного ответа скопируйте содержимое digest подписи. Установите новые значения в **.env**
+  - Пример значений по умолчанию:
+  ```
+  SKIN_DEFAULT_SHA256=98805f6ab41575b7ff4af11b70c074773c5bcc210f2429f6b5513150d746e4cd
+  CAPE_DEFAULT_SHA256=f2072fdfff5302b7c13672e54fdc8895dc75b3f675be3a43245de6894f971e38
+  ```
+  - Перезагрузите контейнера. Выполнить в папке `texture-provider`:
+  ```
+  docker compose restart
+  ```
+
 - Подпись домена вы можете выполнить через [**[ CertBot ]**](https://certbot.eff.org/)
 #### Перезагрузить NGINX
 ```bash
 service nginx restart
-```
-## Использование Composer | ❗❗❗ Не рекомендуется для неопытных пользователей ❗❗❗
-<img src="https://img.shields.io/badge/composer-F28D1A?style=for-the-badge&logo=packagist&logoColor=gray&label=Packagist&labelColor=white" alt="Composer" height="50"/>
-
-- Composer [Ссылка на иструкцию по установке Composer](https://getcomposer.org/download/)
-- ❗❗❗ **Для использования у вас уже должен быть установлен php со всеми необходимыми модулями**
-```bash
-composer create-project microwin7/texture-provider
-```
-- Для инициализации всех пакетов, используется команда:
-```bash
-composer install
 ```
 
 # НАСТРОЙКА СКРИПТА
@@ -173,53 +241,40 @@ composer install
 1. **STORAGE**
   - Локальное файловое хранилище скинов и плащей
   - Имеет 5 типов для определения имени хранимого файла, они же **StorageType**'s:
-    - **USERNAME** - [username.png] (Задан по умолчанию)
+    - **USERNAME** - [username.png] DEPRECATED
       - Поиск происходит вне зависимости от регистра, если файл не будет найден
-    - **UUID** - [uuid.png]
-    - **DB_USER_ID** - [user_id.png] работает только с связью с БД
-    - **DB_SHA1** - [sha1.png] работает только с связью с БД
-    - **DB_SHA256** - [sha256.png] работает только с связью с БД
-    - Настройка в конфиге`.env`: `USER_STORAGE_TYPE`
-    - Для **DB_USER_ID** используется таблица пользователей по UUID, настройка подключения к БД производиться в конфигурации библиотеки:
-      - `config/php-utils/^1.7.0/MainConfig.php` константа **MODULES['TextureProvider']**
-    - Для **DB_SHA1** и **DB_SHA256** используется таблица **`user_assets`**, поиск пользователя производиться по UUID в таблице пользователей, запись в эту таблицу осуществляется с привязыванием к id колонке пользователя
-      - Настройка подключения к БД производиться в конфигурации библиотеки:
-        - `config/php-utils/^1.7.0/MainConfig.php` константа **MODULES['TextureProvider']**
-      - Для реализации в вашем ЛК:
-        - в поле **`uuid`** вы должны записать UUID пользователя
-        - в поле **`name`** вы должны записать тип текстуры: **SKIN**, **CAPE**
-        - в поле **`hash`** вы должны записать соответствующую хеш сумму файла
-        - в поле **`slim`** вы должны записать является ли скин **SLIM**: '1' или 'SLIM' (Да), '0' (Нет)
-        - Поддержка поля **`slim`** пока что не реализована
-      - Создание таблицы для хранения хешей:
-      ```sql
-      CREATE TABLE user_assets (
-	      user_id INT,
-	      type ENUM('SKIN','CAPE'),
-	      hash TINYTEXT NOT NULL,
-	      meta ENUM('SLIM'),
-	    PRIMARY KEY (user_id, type),
-	    INDEX uid (user_id),
-	    INDEX uid_name (user_id, type),
-	    FOREIGN KEY (user_id) REFERENCES users(user_id) ON UPDATE CASCADE ON DELETE CASCADE
-	    );
-      ```
-      - Изменить имя таблицы и колонки id с ключом для связывания с `PRIMARY KEY` в этой части: `REFERENCES users(user_id)`
-      - Этот тип рекомендован. Так же желательно не удалять старые файлы текстур.
-      - Позже будет реализован скрипт очистки старых неиспользуемых файлов, с N периодом времени
-1. **MOJANG**
+    - **UUID** - [uuid.png] DEPRECATED
+    - **DB_USER_ID** - [user_id.png] DEPRECATED
+    - **DB_SHA1** - [sha1.png] DEPRECATED
+    - **DB_SHA256** - [sha256.png] ПО УМОЛЧАНИЮ
+  - Текущий API работает с базой данных и хешами скинов и плащей, но на получение самих скинов и плащей для сайта, можно использовать в запросе ник или uuid
+    - Пример:
+    ```
+    https://gravit-support.ru/texture-provider-dev/SKIN/microwin7
+    ```
+    ```
+    https://gravit-support.ru/texture-provider-dev/SKIN/36fdaf1d-c064-4d12-b1c6-ff0fd83636dd
+    ```
+    ```
+    https://gravit-support.ru/texture-provider-dev/CAPE/microwin7
+    ```
+    ```
+    https://gravit-support.ru/texture-provider-dev/CAPE/36fdaf1d-c064-4d12-b1c6-ff0fd83636dd
+    ```
+    - При этом правильной ссылкой остаётся обращение всё же по установленной хеш-сумме к файлу и нагрузка на API меньше
+2. **MOJANG**
   - Поиск текстур в Mojang по **USERNAME**
   - Для использования только этого типа хранения
     - В конце запроса добавьте **`&method=mojang`**
   - Для использования этого типа хранения, вместе со всеми другими
     - В конце запроса добавьте **`&method=hybrid`**
     - Cперва будет поиск по локальному файловому хранилищу, потом Mojang
-2. **COLLECTION**
+3. **COLLECTION**
   - Выдава скина из коллекции рандомных скинов, созданную администратором.
   - Последние 12 символов от UUID переводяться в DEC и деляться на количество скинов в коллекции
   - после чего остаток и будет являться номером из коллекции.
   - Включение хранилища в `.env`: **GIVE_FROM_COLLECTION=true**
-3. **DEFAULT**
+4. **DEFAULT**
   - Выдача скинов и плащей по умолчанию, если не найдены ни в локальном хранилище, ни в Mojang, ни в коллекции скинов.
   - Включение в `.env`: **GIVE_DEFAULT_SKIN=true** и **GIVE_DEFAULT_CAPE=true**. По умолчанию скины отдаются всегда
 
@@ -242,54 +297,13 @@ composer install
 - Пути от корня хранилища в конфиге `.env`: **TEXTURE_{ТИП_ТЕКСТУРЫ}_PATH**. Примеры есть в `.env.example`
 ### Для включения поддержки версий 5.2.9-5.4.x
 - Включите изменение хеша для старых версий в `.env`: **LEGACY_DIGEST**
-## Настройка NGINX (ТОЛЬКО ДЛЯ ТЕХ КТО НЕ ИСПОЛЬЗУЕТ DOCKER)
-### На домен example.com/texture-provider/:
-```nginx
-    location /texture-provider/ {
-        rewrite "^(/texture-provider)/(.*)$" $1/index.php?$2 last;
-        alias /var/www/html/texture-provider/public/;
-        location ~ \.php$ {
-            fastcgi_pass unix:/run/php/php8.3-fpm.sock;
-            fastcgi_buffering off;
-            fastcgi_param SCRIPT_FILENAME $request_filename;
-            include         /etc/nginx/fastcgi_params;
-        }
-    }
-```
-### На СУБ-домен (под-домен):
-```nginx
-server {
-    listen 80;
-    server_name textures.ВАШ_ДОМЕН;
-    charset utf-8;
-
-    #access_log  /var/log/nginx/texture-provider.access.log;
-    #error_log  /var/log/nginx/texture-provider.error.log notice;
-
-    root /путь/до/public; # Example: /var/www/html/texture-provider/public
-
-    location = /favicon.ico { access_log off; log_not_found off; }
-    location = /robots.txt  { access_log off; log_not_found off; }
-
-    location / {
-        rewrite "^/(.*)$" /index.php?$1 last;
-        location ~ \.php$ {
-            fastcgi_pass unix:/run/php/php8.3-fpm.sock;
-            fastcgi_index index.php;
-            fastcgi_buffering off;
-            fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
-            include         /etc/nginx/fastcgi_params;
-        }
-    }
-}
-```
-- **alias** путь заменить на путь, где располагается папка public/, слеш в конце обязателен
 
 ## Настройка LaunchServer'a
 ### При использовании в сайте:
 ```json
       "textureProvider": {
         "url": "https://example.com/texture-provider/%username%/%uuid%",
+        "bearerToken": null,
         "type": "json"
       },
       "mixes": {
@@ -307,6 +321,7 @@ server {
 ```json
       "textureProvider": {
         "url": "https://textures.example.com/%username%/%uuid%",
+        "bearerToken": null,
         "type": "json"
       },
       "mixes": {
@@ -394,10 +409,8 @@ TEXTURE_EXTENSTION=png - Расширения для хранимых файло
 
 LEGACY_DIGEST=false - Подпись хеш-сумма файлов, старого образца с версии 5.2.9 до 5.4.x
 MAX_SIZE_BYTES=2M - Максимальный размер загружаемого файла, так же изменить в nginx и php-fpm контейнере, если используете Docker. В папке config/
-# Скин в формате Base64 для DEFAULT хранилища (Посетите сайт https://base64.guru/converter/encode/image)
-SKIN_DEFAULT=iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAMAAACVQ462AAAAWlBMVEVHcEwsHg51Ri9qQC+HVTgjIyNOLyK7inGrfWaWb1udZkj///9SPYmAUjaWX0FWScwoKCgAzMwAXl4AqKgAaGgwKHImIVtGOqU6MYkAf38AmpoAr68/Pz9ra2t3xPtNAAAAAXRSTlMAQObYZgAAAZJJREFUeNrUzLUBwDAUA9EPMsmw/7jhNljl9Xdy0J3t5CndmcOBT4Mw8/8P4pfB6sNg9yA892wQvwzSIr8f5JRzSeS7AaiptpxazUq8GPQB5uSe2DH644GTsDFsNrqB9CcDgOCAmffegWWwAExnBrljqowsFBuGYShY5oakgOXs/39zF6voDG9r+wLvTCVUcL+uV4m6uXG/L3Ut691697tgnZgJavinQHOB7DD8awmaLWEmaNuu7YGf6XcIITRm19P1ahbARCRGEc8x/UZ4CroXAQTVIGL0YySrREBADFGicS8XtG8CTS+IGU2F6EgSE34VNKoNz8348mzoXGDxpxkQBpg2bWobjgZSm+uiKDYH2BAO8C4YBmbgAjpq5jUl4yGJC46HQ7HJBfkeTAImIEmgmtpINi44JsHx+CKA/BTuArISXeBTR4AI5gK4C2JqRfPs0HNBkQnG8S4Yxw8IGoIZfXEBOW1D4YJDAdNSXgRevP+ylK6fGBCwsWywmA19EtBkJr8K2t4N5pnAVwH0jptsBp+2gUFj4tL5ywAAAABJRU5ErkJggg==
-# Плащ в формате Base64 для DEFAULT хранилища (Посетите сайт https://base64.guru/converter/encode/image)
-CAPE_DEFAULT=iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgAQMAAACYU+zHAAAAA1BMVEVHcEyC+tLSAAAAAXRSTlMAQObYZgAAAAxJREFUeAFjGAV4AQABIAABL3HDQQAAAABJRU5ErkJggg==
+SKIN_DEFAULT_SHA256=98805f6ab41575b7ff4af11b70c074773c5bcc210f2429f6b5513150d746e4cd - SHA256 хеш-сумма скина
+CAPE_DEFAULT_SHA256=f2072fdfff5302b7c13672e54fdc8895dc75b3f675be3a43245de6894f971e38 - SHA256 хеш-сумма плаща
 
 ## Texture-Provider - Настройки провидера (Описание можно найти в файле src/Config.php)
 ROUTERING=true

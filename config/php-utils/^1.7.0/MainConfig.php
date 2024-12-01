@@ -13,44 +13,31 @@ class MainConfig
     public const array SERVERS = [];
     /** @var array<string, array<string, string|array<string, string>>> */
     public const array MODULES = [
-        'ItemShop' => [
-            'DB_NAME' => 'ItemShop',
-            'prefix' => ''
-        ],
-        'VoteRewards' => [
-            'DB_NAME' => 'VoteRewards',
-            'prefix' => '',
-        ],
         'LuckPerms' => [
             'DB_NAME' => 'LuckPerms',
             'prefix' => 'luckperms_',
         ],
-        'LiteBans' => [
-            'DB_NAME' => 'LiteBans',
-            'prefix' => 'litebans_',
-        ],
         'TextureProvider' => [
             /** Driver Connect Database */
-            'DB_NAME' => 'site',
+            'DB_NAME' => 'texture_provider',
             'table_user' => [
-                'TABLE_NAME' => 'users',
+                'TABLE_NAME' => 'texture_provider_users',
                 /**
                  * Колонка связывания с table_user_assets
                  * Либо для получения User ID
                  * Example:
                  * 'user_id' for UserStorageTypeEnum::DB_USER_ID,
                  */
-                'id_column' => 'user_id',
+                'id_column' => 'id',
                 'username_column' => 'username',
                 'uuid_column' => 'uuid',
-                'email_column' => 'email',
             ],
             /**
              * For UserStorageTypeEnum::DB_SHA1
              * or UserStorageTypeEnum::DB_SHA256
              */
             'table_user_assets' => [
-                'TABLE_NAME' => 'user_assets',
+                'TABLE_NAME' => 'texture_provider_user_assets',
                 /**
                  * Колонка связывания с table_user
                  */
@@ -60,7 +47,7 @@ class MainConfig
                  */
                 'texture_type_column' => 'type',
                 'hash_column' => 'hash',
-                /** NULL(int 0)|SLIM(int 1) */
+                /** NULL|SLIM */
                 'texture_meta_column' => 'meta',
             ],
         ],

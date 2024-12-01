@@ -23,3 +23,18 @@ services:
       - 29300:80
     depends_on:
       - php-fpm
+      - postgres
+  postgres:
+    image: postgres:17
+    container_name: texture_provider_pgsql
+    restart: always
+    environment:
+      POSTGRES_USER: texture_provider
+      POSTGRES_PASSWORD: texture_provider
+      POSTGRES_DB: texture_provider
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      # Монтируем данные базы данных в корень приложения
+      - ./postgres-data:/var/lib/postgresql/data
+      # Монтируем SQL-скрипты для выполнения при инициализации
+      - ./sql/postgresql/install.sql:/docker-entrypoint-initdb.d/install.sql

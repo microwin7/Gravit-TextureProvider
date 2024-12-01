@@ -10,7 +10,7 @@ use Microwin7\PHPUtils\Exceptions\FileSystemException;
 /** ПЕРЕПИСАТЬ */
 class Cache
 {
-    public static function saveCacheFile(string $login, \GdImage $canvas, ResponseTypeEnum $responseType, ?int $size): void
+    public static function saveGDTexture(string $login, \GdImage $canvas, ResponseTypeEnum $responseType, ?int $size): void
     {
         $directory = Texture::TEXTURE_STORAGE_FULL_PATH($responseType, $size);
         if (!file_exists($directory))
