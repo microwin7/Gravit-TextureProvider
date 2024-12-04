@@ -36,33 +36,7 @@
 
 - GravitLauncher 5.2.9+
 - Консольный доступ SSH к хостингу. Для развёртывания библиотек
-<details>
-  <summary>Если не используете Docker (развернуть)</summary>
-
-- PHP 8.3+
-- Расширение Multibyte String `php-mbstring`. Пример: `sudo apt-get install php8.3-mbstring`
-- Расширение GD `php-gd`. Пример: `sudo apt-get install php8.3-gd`
-- Расширения для работы с БД:
-  - **[ MySQL Database ]** Если **DB_SUD_DB = 'mysql'** - `mysql`. Пример : `sudo apt-get install php8.3-mysql`
-    - Установка с игнорированием `pgsql` расширения PHP, так как оно не будет использоваться в системе:
-    - 
-      ```bash
-      composer install --ignore-platform-req=ext-pgsql
-      ```
-  - **[ PostgreSQL Database ]** Если **DB_SUD_DB = 'pgsql'** - `pgsql`. Пример: `sudo apt-get install php8.3-pgsql`
-    - Установка с игнорированием `mysql` расширения PHP, так как оно не будет использоваться в системе:
-    -
-      ```bash
-      composer install --ignore-platform-req=ext-mysql
-      ```
-  - Если вы не используете БД, можете игнорировать расширения:
-  -
-    ```bash
-    composer install --ignore-platform-req=ext-mysql --ignore-platform-req=ext-pgsql
-    ```
-- Composer [Ссылка на иструкцию по установке Composer](https://getcomposer.org/download/)
-
-</details>
+- Поддержка Docker (поддерживается всем современным железом, включая примерно архитектуры с 2007-2008 года)
 
 # Установка
 ## Установка в Docker контейнер:
@@ -131,14 +105,6 @@ upstream dockerTextureProvider {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header Env-Vendor null;
-        proxy_set_header App-Url "http://$host/";
-        proxy_set_header Script-Path "texture-provider";
-        proxy_set_header Ecdsa-Id-Pub "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJDi51DKs5f6ERSrDDjns00BkI963L9OS9wLA2Ak/nACZCgQma+FsTsbYtZQm4nk+rtabM8b9JgzSi3sPINb8fg==";
-        set $bearer_token "";
-        if ($request_uri ~ ^/texture-provider/api/) {
-            set $bearer_token "";
-        }
-        proxy_set_header Bearer-Token $bearer_token;
         proxy_pass http://dockerTextureProvider/;
     }
 ```
@@ -160,32 +126,19 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header Env-Vendor null;
-        proxy_set_header App-Url "http://$host/";
-        proxy_set_header Script-Path "";
-        proxy_set_header Ecdsa-Id-Pub "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJDi51DKs5f6ERSrDDjns00BkI963L9OS9wLA2Ak/nACZCgQma+FsTsbYtZQm4nk+rtabM8b9JgzSi3sPINb8fg==";
-        set $bearer_token "";
-        if ($request_uri ~ ^/api/) {
-            set $bearer_token "";
-        }
-        proxy_set_header Bearer-Token $bearer_token;
         proxy_pass http://dockerTextureProvider/;
     }
 }
 ```
 - Изменить **ВАШ_ДОМЕН**
-- Изменить в **proxy_set_header App-Url** протокол **http** или **https**
+- Изменить в `.env` домен и протокол **APP_URL=http://127.0.0.1/**
 ##### Настройка публичного ключа доступа для загрузки скинов и плащей из лаунчера:
 - Перейдите в папку лаунчсервера, далее в папку `.keys`. Она может быть скрыта
 - Скопируйте себе на ПК файл `ecdsa_id.pub`
 - Через сайт [**[ base64.guru ]**](https://base64.guru/converter/encode/file) преобразуйте файл в строку Base64
-- Изменить в **proxy_set_header Ecdsa-Id-Pub** Base64 строку
+- Изменить в `.env` **LAUNCH_SERVER_ECDSA256_PUBLIC_KEY_BASE64** строку
 ##### Настройка использования API загрузки, установите токен в условии обращения к /api
-- Любой пароль, желательно надёжный
-```
-if ($request_uri ~ ^/api/) {
-    set $bearer_token "";
-}
-```
+- Изменить в `.env` `BEARER_TOKEN` и в конфиге лаунчсервера в разделе текстур провидера
 - Пример использования API:
   - API загрузки скина: /api/upload/SKIN
   - API загрузки плаща: /api/upload/CAPE
@@ -197,8 +150,8 @@ curl -X POST http://127.0.0.1:29300/api/upload/SKIN \
 -F "hd_allow=false" \
 -F "file=@/tmp/phpJVBzIM"
 ```
-  - `BEARER_TOKEN` - заменить на указанный в `$bearer_token` nginx
-  - Параметр `hd_allow` не обязательный, по умолчанию **true**, можно переобределить в **.env** установив **HD_TEXTURES_ALLOW=false**
+  - `BEARER_TOKEN` - заменить на указанный в `.env`
+  - Параметр `hd_allow` не обязательный, по умолчанию **true**, можно переобределить в `.env` установив `HD_TEXTURES_ALLOW=false`
 ##### Смена скина/плаща по умолчанию через API
 - Выполнить запрос
 ```
@@ -281,8 +234,6 @@ service nginx restart
 ## Ссылка на скрипт
 - Протокол и `ДОМЕН`/`IP` `.env` константа: **APP_URL**
 - Путь от корня домена `.env` константа: **SCRIPT_PATH**. Сделайть пустой **SCRIPT_PATH=** если используете под-домен
-## Настройка пути корня до сайта
-- Путь до корня сайта или texture-provider'a в конфиге `.env` константа: **ROOT_FOLDER**. По умолчанию: /var/www/html
 ## Хранилище текстур
 - Хранилище от корня сайта в конфиге `.env`: **STORAGE_DIR**. По умолчанию: storage
 ### Если у вас своя папка storage
