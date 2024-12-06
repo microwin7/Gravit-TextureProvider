@@ -1,8 +1,6 @@
 services:
   php-fpm:
-    build:
-      context: .
-      dockerfile: Dockerfile.php-fpm
+    image: microwin7/texture-provider:php-fpm
     restart: always
     environment:
       - ROOT_FOLDER=/var/www/html
@@ -15,9 +13,7 @@ services:
       - ./storage:/var/www/html/storage
       - ./.env:/var/www/html/.env
   nginx:
-    build:
-      context: .
-      dockerfile: Dockerfile.nginx
+    image: microwin7/texture-provider:nginx
     restart: always
     ports:
       - 29300:80
