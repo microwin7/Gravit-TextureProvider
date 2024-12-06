@@ -154,7 +154,7 @@ class InitRequest
                     $this->requestParams = $this->requestParams->withEnum(ResponseTypeEnum::JSON);
                     $textureProvider = new TextureProvider(new User($this->requestParams));
                     putenv("USER_STORAGE_TYPE=" . strtoupper($this->routeInfo->extraParameters['type']));
-                    TextureProvider::ResponseTexture($textureProvider->{strtolower($responseType->name)}->data);
+                    TextureProvider::ResponseTexture($textureProvider->{strtolower($responseType->name)}?->data);
                     break;
                 case 'upload':
                     // Token signature verification and get username, uuid out JWT
