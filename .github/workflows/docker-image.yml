@@ -24,11 +24,10 @@ jobs:
       - name: Build and push nginx
         uses: docker/build-push-action@v6
         with:
-          context: .
-          dockerfile: Dockerfile.nginx
           platforms: linux/amd64,linux/arm64
           push: true
           tags: microwin7/texture-provider:nginx
+          file: Dockerfile.nginx
 
   build-php-fpm:
     runs-on: ubuntu-latest
@@ -48,8 +47,7 @@ jobs:
       - name: Build and push php-fpm
         uses: docker/build-push-action@v6
         with:
-          context: .
-          dockerfile: Dockerfile.php-fpm
           platforms: linux/amd64,linux/arm64
           push: true
           tags: microwin7/texture-provider:php-fpm
+          file: Dockerfile.php-fpm
